@@ -1,0 +1,12 @@
+# Профиль local: разработка на своём компьютере, Redis из elementary-infra/local.
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+management:
+  endpoint:
+    health:
+      show-details: always   # локально видно, какие компоненты UP или DOWN (например, redis)

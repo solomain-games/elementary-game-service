@@ -1,0 +1,21 @@
+# Общие настройки для всех профилей.
+# Профиль выбирается переменной SPRING_PROFILES_ACTIVE; если не задан — local.
+
+spring:
+  application:
+    name: game-service
+  profiles:
+    default: local
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      probes:
+        enabled: true   # /actuator/health/liveness и /readiness — пригодятся для Docker и облака

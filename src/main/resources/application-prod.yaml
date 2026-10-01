@@ -1,0 +1,13 @@
+# Профиль prod: боевой сервер. Значения приходят из переменных окружения, секретов в файле нет.
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+management:
+  endpoint:
+    health:
+      show-details: never   # наружу не раскрываем внутреннее устройство

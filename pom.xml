@@ -15,6 +15,7 @@
 	<description>Комнаты, партии и реалтайм игры Elementary</description>
 	<properties>
 		<java.version>25</java.version>
+		<game-core.version>0.1.0-SNAPSHOT</game-core.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -40,6 +41,13 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
+
+		<!-- Правила игры: публикуется из elementary-game-core в GitHub Packages -->
+		<dependency>
+			<groupId>com.solomain.elementary</groupId>
+			<artifactId>game-core</artifactId>
+			<version>${game-core.version}</version>
 		</dependency>
 
 		<dependency>
@@ -73,6 +81,19 @@
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
+
+	<!-- Откуда брать game-core. Maven Central по-прежнему используется для всего остального.
+	     id должен совпадать с <server><id> в ~/.m2/settings.xml, где лежит токен. -->
+	<repositories>
+		<repository>
+			<id>github</id>
+			<name>GitHub Packages</name>
+			<url>https://maven.pkg.github.com/solomain-games/elementary-game-core</url>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
 
 	<build>
 		<plugins>

@@ -15,7 +15,7 @@
 	<description>Комнаты, партии и реалтайм игры Elementary</description>
 	<properties>
 		<java.version>25</java.version>
-		<game-core.version>0.1.0-SNAPSHOT</game-core.version>
+		<game-core.version>0.1.0</game-core.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -29,6 +29,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<!-- Resource server: проверка JWT из заголовка Authorization по открытому ключу (JWKS) user-service -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

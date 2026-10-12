@@ -10,6 +10,10 @@ spring:
 server:
   port: 8081
 
+elementary:
+  jwt:
+    issuer: elementary-user-service   # должен совпадать с elementary.jwt.issuer в user-service
+
 management:
   endpoints:
     web:

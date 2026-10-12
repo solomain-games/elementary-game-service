@@ -7,6 +7,12 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
+elementary:
+  jwt:
+    jwk-set-uri: ${JWKS_URI}   # например http://user-service:8082/.well-known/jwks.json внутри сети Docker
+  websocket:
+    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS}   # адрес сайта, например https://elementary.example; несколько — через запятую
+
 management:
   endpoint:
     health:

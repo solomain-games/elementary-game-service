@@ -6,6 +6,12 @@ spring:
       host: localhost
       port: 6379
 
+elementary:
+  jwt:
+    jwk-set-uri: http://localhost:8082/.well-known/jwks.json   # user-service напрямую, не через шлюз
+  websocket:
+    allowed-origins: http://localhost:5173   # фронтенд на Vite
+
 management:
   endpoint:
     health:

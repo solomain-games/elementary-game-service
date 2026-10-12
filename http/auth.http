@@ -1,0 +1,24 @@
+### 1. Гостевой вход в user-service — токен сохраняется в переменную {{token}}
+POST http://localhost:8082/api/auth/guest
+Content-Type: application/json
+
+{
+  "name": "Ватсон"
+}
+
+> {% client.global.set("token", response.body.token); %}
+
+### 2. Без токена — 401, code: UNAUTHORIZED
+GET http://localhost:8081/api/game/cases
+
+### 3. С поддельным токеном — 401
+GET http://localhost:8081/api/game/cases
+Authorization: Bearer not-a-jwt
+
+### 4. С токеном из шага 1 — проверка пройдена. Эндпоинтов ещё нет (появятся в Г3), поэтому 404
+GET http://localhost:8081/api/game/cases
+Authorization: Bearer {{token}}
+
+### 5. То же через шлюз
+GET http://localhost:8080/api/game/cases
+Authorization: Bearer {{token}}

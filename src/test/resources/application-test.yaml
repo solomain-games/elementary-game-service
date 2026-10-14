@@ -1,0 +1,8 @@
+# Профиль test: настройки для тестов, без зависимости от соседних репозиториев и запущенных сервисов.
+
+elementary:
+  cases:
+    dir: src/test/resources/test-cases   # копия дела-заглушки из elementary-cases (репозиторий приватный, в CI его нет)
+  jwt:
+    # Заглушка: тесты, которым нужна проверка токенов, подставляют адрес своей заглушки JWKS
+    jwk-set-uri: http://localhost:1/.well-known/jwks.json

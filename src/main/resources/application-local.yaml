@@ -7,6 +7,8 @@ spring:
       port: 6379
 
 elementary:
+  cases:
+    dir: ../cases/cases   # соседний репозиторий elementary-cases (путь от папки game-service)
   jwt:
     jwk-set-uri: http://localhost:8082/.well-known/jwks.json   # user-service напрямую, не через шлюз
   websocket:

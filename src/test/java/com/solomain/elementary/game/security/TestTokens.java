@@ -28,9 +28,9 @@ import java.time.Instant;
  * <p>Ключи генерируются при запуске тестов. Заглушка одна на все тесты, поэтому её адрес
  * одинаков и Spring переиспользует один контекст для разных тестовых классов.
  */
-final class TestTokens {
+public final class TestTokens {
 
-    static final String ISSUER = "elementary-user-service";
+    public static final String ISSUER = "elementary-user-service";
 
     private static final RSAKey KEY = generateKey();
     /** Чужой ключ с тем же kid: подделка, которая выдаёт себя за ключ user-service. */
@@ -39,25 +39,25 @@ final class TestTokens {
     private static final HttpServer JWKS_SERVER = startJwksServer();
 
     /** Адрес JWKS заглушки; подставляется в {@code elementary.jwt.jwk-set-uri}. */
-    static final String JWKS_URI =
+    public static final String JWKS_URI =
             "http://localhost:" + JWKS_SERVER.getAddress().getPort() + "/.well-known/jwks.json";
 
     private TestTokens() {
     }
 
-    static String valid(String playerId, String name) {
+    public static String valid(String playerId, String name) {
         return sign(KEY, claims(playerId, name, ISSUER, Instant.now()));
     }
 
-    static String expired() {
+    public static String expired() {
         return sign(KEY, claims("g-expired", "Анна", ISSUER, Instant.now().minus(Duration.ofDays(2))));
     }
 
-    static String signedByForeignKey() {
+    public static String signedByForeignKey() {
         return sign(FOREIGN_KEY, claims("g-forged", "Анна", ISSUER, Instant.now()));
     }
 
-    static String withIssuer(String issuer) {
+    public static String withIssuer(String issuer) {
         return sign(KEY, claims("g-other", "Анна", issuer, Instant.now()));
     }
 

@@ -1,0 +1,139 @@
+{
+  "$schema": "../../schema/case.schema.json",
+  "formatVersion": 1,
+  "id": "demo",
+  "languages": [
+    "ru"
+  ],
+  "title": {
+    "ru": "Пропавший браслет"
+  },
+  "summary": {
+    "ru": "Учебное дело из пяти карт для проверки формата и разработки."
+  },
+  "cover": "images/cover.webp",
+  "access": "free",
+  "recommendedPlayers": {
+    "min": 1,
+    "max": 4
+  },
+  "durationMinutes": 10,
+  "prologue": {
+    "slides": [
+      {
+        "image": "images/prologue-1.webp",
+        "text": {
+          "ru": "Утром в особняке Морозовых обнаружили пропажу **фамильного браслета**."
+        },
+        "durationSeconds": 6
+      },
+      {
+        "text": {
+          "ru": "Вечером накануне в доме были трое: хозяйка, садовник и гостья."
+        },
+        "durationSeconds": 5
+      }
+    ]
+  },
+  "cards": [
+    {
+      "number": 1,
+      "type": "image",
+      "image": "cards/01.webp",
+      "caption": {
+        "ru": "Пустая шкатулка в спальне"
+      },
+      "relevant": true
+    },
+    {
+      "number": 2,
+      "type": "text",
+      "background": "backgrounds/paper.webp",
+      "text": {
+        "ru": "Показания садовника: «Весь вечер я был в оранжерее. **Свет в спальне погас около полуночи**»."
+      },
+      "relevant": true
+    },
+    {
+      "number": 3,
+      "type": "image",
+      "image": "cards/03.webp",
+      "caption": {
+        "ru": "Следы земли на ковре"
+      },
+      "relevant": false
+    },
+    {
+      "number": 4,
+      "type": "text",
+      "background": "backgrounds/paper.webp",
+      "align": "center",
+      "text": {
+        "ru": "Записка в кармане гостьи:\n__Встретимся у ломбарда__ в **10 утра**"
+      },
+      "relevant": true
+    },
+    {
+      "number": 5,
+      "type": "text",
+      "background": "backgrounds/receipt.webp",
+      "text": {
+        "ru": "Чек из цветочного магазина на имя хозяйки."
+      },
+      "relevant": false
+    }
+  ],
+  "questions": [
+    {
+      "id": "culprit",
+      "text": {
+        "ru": "Кто взял браслет?"
+      },
+      "options": [
+        {
+          "id": "owner",
+          "text": {
+            "ru": "Хозяйка"
+          }
+        },
+        {
+          "id": "gardener",
+          "text": {
+            "ru": "Садовник"
+          }
+        },
+        {
+          "id": "guest",
+          "text": {
+            "ru": "Гостья"
+          }
+        }
+      ],
+      "correct": "guest"
+    },
+    {
+      "id": "motive",
+      "text": {
+        "ru": "Зачем?"
+      },
+      "options": [
+        {
+          "id": "debt",
+          "text": {
+            "ru": "Чтобы заложить и расплатиться с долгами"
+          }
+        },
+        {
+          "id": "revenge",
+          "text": {
+            "ru": "Из мести хозяйке"
+          }
+        }
+      ],
+      "correct": "debt"
+    }
+  ],
+  "solution": {
+    "ru": "Гостья забрала браслет из шкатулки ([[1]]) после того, как погас свет ([[2]]), и утром собиралась заложить его в ломбарде ([[4]]). Следы земли ([[3]]) оставил садовник, когда приносил цветы ([[5]])."
+  }
+}

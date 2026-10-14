@@ -15,7 +15,7 @@ GET http://localhost:8081/api/game/cases
 GET http://localhost:8081/api/game/cases
 Authorization: Bearer not-a-jwt
 
-### 4. С токеном из шага 1 — проверка пройдена. Эндпоинтов ещё нет (появятся в Г3), поэтому 404
+### 4. С токеном из шага 1 — список дел (Г3)
 GET http://localhost:8081/api/game/cases
 Authorization: Bearer {{token}}
 

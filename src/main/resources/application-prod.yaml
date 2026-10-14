@@ -8,6 +8,8 @@ spring:
       password: ${REDIS_PASSWORD:}
 
 elementary:
+  cases:
+    dir: ${CASES_DIR}   # папка с делами внутри контейнера, например /data/cases
   jwt:
     jwk-set-uri: ${JWKS_URI}   # например http://user-service:8082/.well-known/jwks.json внутри сети Docker
   websocket:

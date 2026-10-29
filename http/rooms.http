@@ -1,0 +1,71 @@
+### Сценарий Г4: создал → двое вошли → один исключён → запуск.
+### Нужны запущенные Redis (infra/local), user-service и game-service.
+### Три игрока = три гостевых входа; токены сохраняются в переменные.
+
+### 1. Анна входит
+POST http://localhost:8082/api/auth/guest
+Content-Type: application/json
+
+{ "name": "Анна" }
+
+> {% client.global.set("anna", response.body.token); %}
+
+### 2. Борис входит
+POST http://localhost:8082/api/auth/guest
+Content-Type: application/json
+
+{ "name": "Борис" }
+
+> {% client.global.set("boris", response.body.token); client.global.set("borisId", response.body.user.id); %}
+
+### 3. Вера входит
+POST http://localhost:8082/api/auth/guest
+Content-Type: application/json
+
+{ "name": "Вера" }
+
+> {% client.global.set("vera", response.body.token); %}
+
+### 4. Анна создаёт комнату — 201 и код
+POST http://localhost:8081/api/game/rooms
+Authorization: Bearer {{anna}}
+Content-Type: application/json
+
+{ "caseId": "demo", "language": "ru", "maxPlayers": 6, "turnTimeoutSeconds": 60 }
+
+> {% client.global.set("code", response.body.code); %}
+
+### 5. Борис входит в комнату — 204
+POST http://localhost:8081/api/game/rooms/{{code}}/join
+Authorization: Bearer {{boris}}
+
+### 6. Вера входит в комнату — 204
+POST http://localhost:8081/api/game/rooms/{{code}}/join
+Authorization: Bearer {{vera}}
+
+### 7. Сведения о комнате — players: 3
+GET http://localhost:8081/api/game/rooms/{{code}}
+Authorization: Bearer {{vera}}
+
+### 8. Борис пытается начать — 403 NOT_HOST
+POST http://localhost:8081/api/game/rooms/{{code}}/start
+Authorization: Bearer {{boris}}
+
+### 9. Анна исключает Бориса — 204
+POST http://localhost:8081/api/game/rooms/{{code}}/kick
+Authorization: Bearer {{anna}}
+Content-Type: application/json
+
+{ "playerId": "{{borisId}}" }
+
+### 9a. Борис пытается вернуться — 403 KICKED_FROM_ROOM
+POST http://localhost:8081/api/game/rooms/{{code}}/join
+Authorization: Bearer {{boris}}
+
+### 10. Анна запускает игру — 204
+POST http://localhost:8081/api/game/rooms/{{code}}/start
+Authorization: Bearer {{anna}}
+
+### 11. Сведения — players: 2, status: IN_GAME
+GET http://localhost:8081/api/game/rooms/{{code}}
+Authorization: Bearer {{anna}}

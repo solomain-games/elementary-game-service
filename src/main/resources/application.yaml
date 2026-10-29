@@ -13,6 +13,8 @@ server:
 elementary:
   jwt:
     issuer: elementary-user-service   # должен совпадать с elementary.jwt.issuer в user-service
+  rooms:
+    ttl: 6h   # комната без изменений удаляется через 6 часов; каждое изменение продлевает срок
 
 management:
   endpoints:

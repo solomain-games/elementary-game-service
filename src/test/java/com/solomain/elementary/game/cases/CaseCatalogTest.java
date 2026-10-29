@@ -24,7 +24,7 @@ class CaseCatalogTest {
     void loadsCases() {
         copyDemo(root);
 
-        var catalog = new CaseCatalog(new CasesProperties(root));
+        var catalog = new CaseCatalog(new CasesProperties(root.toString()));
 
         assertThat(catalog.summaries()).extracting(CaseSummary::id).containsExactly("demo");
         assertThat(catalog.find("demo")).isPresent();
@@ -39,7 +39,7 @@ class CaseCatalogTest {
         edit(broken, "\"durationMinutes\": 10", "\"durationMinutes\": 0");
         Files.createDirectories(root.resolve("not-a-case"));   // папка без case.json — не дело
 
-        var catalog = new CaseCatalog(new CasesProperties(root));
+        var catalog = new CaseCatalog(new CasesProperties(root.toString()));
 
         assertThat(catalog.summaries()).extracting(CaseSummary::id).containsExactly("demo");
     }
@@ -47,7 +47,7 @@ class CaseCatalogTest {
     @Test
     @DisplayName("нет папки с делами — сервис не запускается")
     void missingDirectory() {
-        assertThatThrownBy(() -> new CaseCatalog(new CasesProperties(root.resolve("missing"))))
+        assertThatThrownBy(() -> new CaseCatalog(new CasesProperties(root.resolve("missing").toString())))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Cases directory not found");
     }

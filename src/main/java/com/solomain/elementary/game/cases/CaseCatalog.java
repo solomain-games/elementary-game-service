@@ -32,7 +32,7 @@ public class CaseCatalog {
     private final Map<String, LoadedCase> cases;
 
     public CaseCatalog(CasesProperties properties) {
-        this.cases = loadAll(properties.dir().toAbsolutePath().normalize(), new CaseLoader());
+        this.cases = loadAll(properties.path(), new CaseLoader());
     }
 
     /** Описания всех дел для выбора в комнате, в порядке id. */

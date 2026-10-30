@@ -29,14 +29,16 @@ public class RoomService {
     private final CaseCatalog cases;
     private final RoomCodeGenerator codes;
     private final RoomLocks locks;
+    private final RoomListener listener;
     private final Clock clock;
 
     public RoomService(RoomRepository rooms, CaseCatalog cases, RoomCodeGenerator codes, RoomLocks locks,
-                       Clock clock) {
+                       RoomListener listener, Clock clock) {
         this.rooms = rooms;
         this.cases = cases;
         this.codes = codes;
         this.locks = locks;
+        this.listener = listener;
         this.clock = clock;
     }
 
@@ -73,7 +75,7 @@ public class RoomService {
      * Исключённого хозяином в эту комнату больше не пускаем.
      */
     public void join(PlayerIdentity player, String code) {
-        update(code, room -> {
+        update(code, RoomEvent.playerJoined(player.id(), player.name()), room -> {
             if (room.isMember(player.id())) {
                 return room;
             }
@@ -96,7 +98,7 @@ public class RoomService {
      * ушёл последний — комната удаляется. Выход из идущей партии появится вместе с партиями (Г7).
      */
     public void leave(PlayerIdentity player, String code) {
-        update(code, room -> {
+        update(code, RoomEvent.playerLeftRoom(player.id()), room -> {
             requireMember(room, player);
             requireWaiting(room, "leaving a running game is not supported yet");
             return room.withoutMember(player.id());
@@ -108,7 +110,7 @@ public class RoomService {
      * Исключить того, кого уже нет, — не ошибка.
      */
     public void kick(PlayerIdentity host, String code, String playerId) {
-        update(code, room -> {
+        update(code, RoomEvent.playerKicked(playerId), room -> {
             requireHost(room, host);
             requireWaiting(room, "players can be kicked only in the waiting room");
             if (host.id().equals(playerId)) {
@@ -123,7 +125,7 @@ public class RoomService {
      * раздачу и саму партию добавят Г6 и Г7.
      */
     public void start(PlayerIdentity host, String code) {
-        update(code, room -> {
+        update(code, RoomEvent.gameStarted(), room -> {
             requireHost(room, host);
             requireWaiting(room, "game is already started");
             return room.withStatus(RoomStatus.IN_GAME);
@@ -137,10 +139,32 @@ public class RoomService {
     }
 
     /**
-     * Прочитать → изменить → сохранить, под замком комнаты. Если изменение вернуло ту же комнату,
-     * сохранять нечего; если в комнате никого не осталось — она удаляется.
+     * Комната для участника: так игрок получает снимок по команде {@code sync}.
+     *
+     * @throws ApiException {@code ROOM_NOT_FOUND} или {@code NOT_IN_ROOM}
      */
-    private void update(String rawCode, UnaryOperator<Room> change) {
+    public Room roomOfMember(PlayerIdentity player, String code) {
+        Room room = find(code);
+        requireMember(room, player);
+        return room;
+    }
+
+    /**
+     * Сама комната не менялась, но участникам нужен свежий снимок: например, кто-то подключился
+     * или отключился. Под замком — чтобы снимок не обогнал изменение, которое делается прямо сейчас.
+     */
+    public void refresh(String code) {
+        locks.withLock(code, () -> {
+            rooms.find(code).ifPresent(room -> listener.roomChanged(room, null));
+            return null;
+        });
+    }
+
+    /**
+     * Прочитать → изменить → сохранить → сообщить, под замком комнаты. Если изменение вернуло
+     * ту же комнату, сохранять и сообщать нечего; если в комнате никого не осталось — она удаляется.
+     */
+    private void update(String rawCode, RoomEvent event, UnaryOperator<Room> change) {
         String code = normalize(rawCode);
         locks.withLock(code, () -> {
             Room room = rooms.find(code).orElseThrow(() -> notFound(rawCode));
@@ -152,7 +176,9 @@ public class RoomService {
                 rooms.delete(code);
                 log.info("Room {} deleted: no members left", code);
             } else {
-                rooms.save(changed.nextVersion());
+                Room saved = changed.nextVersion();
+                rooms.save(saved);
+                listener.roomChanged(saved, event);
             }
             return null;
         });

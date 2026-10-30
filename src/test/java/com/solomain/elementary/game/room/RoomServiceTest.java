@@ -33,10 +33,14 @@ class RoomServiceTest {
     private static final PlayerIdentity VERA = new PlayerIdentity("g-vera", "Вера");
 
     private final InMemoryRoomRepository repository = new InMemoryRoomRepository();
+    /** Что RoomService сообщил наружу: тип события (или «refresh») и версия комнаты. */
+    private final List<String> notifications = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final RoomListener listener = (room, event) ->
+            notifications.add((event == null ? "refresh" : event.type()) + "@" + room.version());
     private final RoomService service = serviceWith(new RoomCodeGenerator());
 
     private RoomService serviceWith(RoomCodeGenerator codes) {
-        return new RoomService(repository, CASES, codes, new RoomLocks(), CLOCK);
+        return new RoomService(repository, CASES, codes, new RoomLocks(), listener, CLOCK);
     }
 
     private static CreateRoomRequest request(int maxPlayers) {
@@ -255,6 +259,65 @@ class RoomServiceTest {
 
             assertError(ErrorCode.GAME_ALREADY_STARTED, () -> service.kick(ANNA, code, "g-boris"));
             assertError(ErrorCode.GAME_ALREADY_STARTED, () -> service.start(ANNA, code));
+        }
+    }
+
+    @Nested
+    @DisplayName("уведомления об изменениях")
+    class Notifications {
+
+        @Test
+        @DisplayName("каждое изменение сообщается с событием и новой версией, по порядку")
+        void events() {
+            String code = service.create(ANNA, request(6)).code();
+            service.join(BORIS, code);
+            service.join(VERA, code);
+            service.kick(ANNA, code, "g-boris");
+            service.leave(VERA, code);
+            service.start(ANNA, code);
+
+            assertThat(notifications).containsExactly(
+                    "PLAYER_JOINED@1", "PLAYER_JOINED@2", "PLAYER_KICKED@3", "PLAYER_LEFT_ROOM@4", "GAME_STARTED@5");
+        }
+
+        @Test
+        @DisplayName("если ничего не изменилось — сообщать нечего")
+        void noChange() {
+            String code = service.create(ANNA, request(6)).code();
+            service.join(ANNA, code);                // уже в комнате
+            service.kick(ANNA, code, "g-nobody");    // такого нет
+
+            assertThat(notifications).isEmpty();
+        }
+
+        @Test
+        @DisplayName("ушёл последний — комната удалена, сообщать некому")
+        void deleted() {
+            String code = service.create(ANNA, request(6)).code();
+            service.leave(ANNA, code);
+
+            assertThat(notifications).isEmpty();
+        }
+
+        @Test
+        @DisplayName("refresh — свежий снимок без события; несуществующая комната — тишина")
+        void refresh() {
+            String code = service.create(ANNA, request(6)).code();
+
+            service.refresh(code);
+            service.refresh("ZZZZZZ");
+
+            assertThat(notifications).containsExactly("refresh@0");
+        }
+
+        @Test
+        @DisplayName("комната для sync — только участнику")
+        void roomOfMember() {
+            String code = service.create(ANNA, request(6)).code();
+
+            assertThat(service.roomOfMember(ANNA, code).code()).isEqualTo(code);
+            assertError(ErrorCode.NOT_IN_ROOM, () -> service.roomOfMember(BORIS, code));
+            assertError(ErrorCode.ROOM_NOT_FOUND, () -> service.roomOfMember(ANNA, "ZZZZZZ"));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.solomain.elementary.game.config;
 
+import com.solomain.elementary.game.realtime.ProtocolJson;
 import com.solomain.elementary.game.realtime.RoomSubscriptionInterceptor;
 import com.solomain.elementary.game.security.StompAuthInterceptor;
 import com.solomain.elementary.game.security.StompErrorHandler;
@@ -7,9 +8,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.scheduling.TaskScheduler;
+
+import java.util.List;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -73,9 +80,50 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setUserDestinationPrefix("/user");               // личные очереди: /user/queue/...
     }
 
+    /**
+     * JSON сообщений — с нашими правилами формата (тексты дел как {@code {"ru": "..."}}).
+     *
+     * <p>Spring Boot добавляет в этот же список свой Jackson-конвертер (со стандартным JsonMapper),
+     * а при отправке выбирается первый подходящий. Поэтому наш ставится в начало списка:
+     * {@code add} в конец оставил бы первым конвертер Boot, и mix-in не применился бы.
+     * {@code true}: стандартные конвертеры (строки, байты) тоже остаются.
+     */
+    @Override
+    public boolean configureMessageConverters(List<MessageConverter> messageConverters) {
+        // Наш конвертер первым, чтобы LocalizedText писался как {"ru": ...}. Строки и байты он не берёт:
+        // их оставляем StringMessageConverter/ByteArrayMessageConverter (text/plain, как и раньше).
+        messageConverters.addFirst(new ProtocolMessageConverter());
+        return true;
+    }
+
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         // Порядок важен: сначала узнаём, кто это (CONNECT), потом проверяем права на подписку
         registration.interceptors(stompAuthInterceptor, roomSubscriptionInterceptor);
+    }
+
+    /**
+     * JSON протокола через {@link ProtocolJson#MAPPER}. Строки и байты не трогает: Jackson-конвертер
+     * проверяет только canSerialize, поэтому без этого он забрал бы и String-ответы.
+     */
+    private static final class ProtocolMessageConverter extends JacksonJsonMessageConverter {
+
+        ProtocolMessageConverter() {
+            super(ProtocolJson.MAPPER);
+        }
+
+        @Override
+        protected boolean canConvertTo(Object payload, MessageHeaders headers) {
+            return !isRaw(payload.getClass()) && super.canConvertTo(payload, headers);
+        }
+
+        @Override
+        protected boolean canConvertFrom(Message<?> message, Class<?> targetClass) {
+            return (targetClass == null || !isRaw(targetClass)) && super.canConvertFrom(message, targetClass);
+        }
+
+        private static boolean isRaw(Class<?> clazz) {
+            return clazz == String.class || clazz == byte[].class;
+        }
     }
 }

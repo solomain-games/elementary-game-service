@@ -15,7 +15,8 @@
 	<description>Комнаты, партии и реалтайм игры Elementary</description>
 	<properties>
 		<java.version>25</java.version>
-		<game-core.version>0.1.0</game-core.version>
+		<!-- 0.2.0: Reveal.allCards. SNAPSHOT публикуется в GitHub Packages при каждом push в main game-core; перед развёртыванием — выпустить релиз 0.2.0 -->
+		<game-core.version>0.2.0-SNAPSHOT</game-core.version>
 	</properties>
 	<dependencies>
 		<dependency>

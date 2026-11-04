@@ -60,7 +60,7 @@ class GameServiceTest {
     void accepted() {
         start();
 
-        CommandResult result = service.execute(CODE, new BeginPlay());
+        CommandResult result = service.execute(CODE, new BeginPlay()).result();
 
         assertThat(result).isInstanceOf(CommandResult.Accepted.class);
         assertThat(repository.find(CODE).orElseThrow().phase()).isEqualTo(Phase.PLAYING);
@@ -72,7 +72,7 @@ class GameServiceTest {
         start();
         int savesBefore = repository.saves();
 
-        CommandResult result = service.execute(CODE, new PlayCard("g-anna", 2));   // ещё предыстория
+        CommandResult result = service.execute(CODE, new PlayCard("g-anna", 2)).result();   // ещё предыстория
 
         assertThat(result).isEqualTo(new CommandResult.Rejected(RuleViolation.WRONG_PHASE));
         assertThat(repository.saves()).isEqualTo(savesBefore);
@@ -100,7 +100,7 @@ class GameServiceTest {
         List<Thread> threads = new ArrayList<>();
         for (int card : current.hand()) {
             threads.add(Thread.ofVirtual().start(() ->
-                    results.add(service.execute(CODE, new PlayCard(current.id(), card)))));
+                    results.add(service.execute(CODE, new PlayCard(current.id(), card)).result())));
         }
         for (Thread thread : threads) {
             thread.join();

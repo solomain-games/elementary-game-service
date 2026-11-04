@@ -36,6 +36,17 @@ class RoomPresenceTest {
     @Test
     @DisplayName("незнакомая сессия — ничего не меняется")
     void unknownSession() {
+        assertThat(presence.playerOf("nope")).isEmpty();
         assertThat(presence.disconnected("nope")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("чья сессия — известно, пока она открыта")
+    void playerOf() {
+        presence.subscribed("s1", "anna", "K7Q2PX");
+        assertThat(presence.playerOf("s1")).contains("anna");
+
+        presence.disconnected("s1");
+        assertThat(presence.playerOf("s1")).isEmpty();
     }
 }

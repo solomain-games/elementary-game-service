@@ -2,6 +2,8 @@ package com.solomain.elementary.game.room;
 
 import com.solomain.elementary.core.engine.Command;
 import com.solomain.elementary.core.engine.CommandResult;
+import com.solomain.elementary.core.engine.PlayerDisconnectTimeout;
+import com.solomain.elementary.core.engine.PlayerDisconnected;
 import com.solomain.elementary.core.engine.PlayerInfo;
 import com.solomain.elementary.core.engine.PlayerLeft;
 import com.solomain.elementary.core.engine.PlayerReturned;
@@ -94,7 +96,7 @@ public class RoomService {
         update(code, RoomEvent.playerJoined(player.id(), player.name()), room -> {
             if (room.isMember(player.id())) {
                 // Участник, который нажал «Выйти» посреди партии, возвращается в неё (ТЗ 4.5)
-                if (room.status() == RoomStatus.IN_GAME && hasLeftGame(room, player)) {
+                if (gameStatus(room, player.id()).orElse(null) == PlayerStatus.LEFT) {
                     applyGameCommand(room, new PlayerReturned(player.id()));
                 }
                 return room;
@@ -205,13 +207,76 @@ public class RoomService {
         return Optional.empty();
     }
 
-    private boolean hasLeftGame(Room room, PlayerIdentity player) {
-        return games.find(room.code())
-                .map(state -> {
-                    int index = state.indexOfPlayer(player.id());
-                    return index >= 0 && state.players().get(index).status() == PlayerStatus.LEFT;
-                })
-                .orElse(false);
+    /** Статус игрока в идущей партии комнаты; пусто — партии нет или он в ней не играет. */
+    private Optional<PlayerStatus> gameStatus(Room room, String playerId) {
+        if (room.status() != RoomStatus.IN_GAME) {
+            return Optional.empty();
+        }
+        return games.find(room.code()).flatMap(state -> {
+            int index = state.indexOfPlayer(playerId);
+            return index < 0 ? Optional.empty() : Optional.of(state.players().get(index).status());
+        });
+    }
+
+    // ---------- подключения (Г10) ----------
+    // Эти команды отправляет не игрок, а сам сервис — по событиям сессий STOMP и по таймеру
+    // (протокол, 5.5). Поэтому прав не проверяют, а «не к месту» — просто ничего не делают.
+
+    /**
+     * У игрока закрылась последняя вкладка комнаты. В идущей партии он становится {@code DISCONNECTED}:
+     * карты остаются в руке, его ход ждёт (ТЗ 4.5). Иначе участникам нужен только свежий снимок
+     * (точка «в сети» у игрока).
+     *
+     * @return {@code true}, если игрок отмечен отключённым в партии — пора запускать таймер ожидания
+     */
+    public boolean markDisconnected(String rawCode, String playerId) {
+        String code = normalize(rawCode);
+        return locks.withLock(code, () -> {
+            Optional<Room> found = rooms.find(code);
+            if (found.isEmpty()) {
+                return false;
+            }
+            Room room = found.get();
+            if (gameStatus(room, playerId).orElse(null) == PlayerStatus.ACTIVE) {
+                return applyGameCommand(room, new PlayerDisconnected(playerId)).isEmpty();
+            }
+            listener.roomChanged(room, List.of());
+            return false;
+        });
+    }
+
+    /**
+     * Игрок снова подключился к комнате. Если в партии он был {@code DISCONNECTED}, он возвращается
+     * ({@code PlayerReturned}) — со своими картами. Иначе — просто свежие снимки.
+     * Вышедшего кнопкой «Выйти» ({@code LEFT}) подключение не возвращает: для этого он снова
+     * входит в комнату ({@link #join}).
+     */
+    public void markReconnected(String rawCode, String playerId) {
+        String code = normalize(rawCode);
+        locks.withLock(code, () -> {
+            rooms.find(code).ifPresent(room -> {
+                if (gameStatus(room, playerId).orElse(null) == PlayerStatus.DISCONNECTED) {
+                    applyGameCommand(room, new PlayerReturned(playerId));
+                } else {
+                    listener.roomChanged(room, List.of());
+                }
+            });
+            return null;
+        });
+    }
+
+    /**
+     * Отключённый игрок не вернулся вовремя: для партии это выход, карты уходят в резерв.
+     * Если он уже вернулся или партии больше нет, ядро/проверка команду отбросят — это устаревший таймер.
+     */
+    public void disconnectTimedOut(String rawCode, String playerId) {
+        String code = normalize(rawCode);
+        locks.withLock(code, () -> {
+            rooms.find(code)
+                    .filter(room -> gameStatus(room, playerId).orElse(null) == PlayerStatus.DISCONNECTED)
+                    .ifPresent(room -> applyGameCommand(room, new PlayerDisconnectTimeout(playerId)));
+            return null;
+        });
     }
 
     // ---------- общее ----------

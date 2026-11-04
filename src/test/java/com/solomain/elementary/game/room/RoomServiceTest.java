@@ -482,4 +482,97 @@ class RoomServiceTest {
             throw new IllegalStateException(e);
         }
     }
+
+    @Nested
+    @DisplayName("подключения и переподключения")
+    class Connections {
+
+        /** Партия Анны и Бориса, уже после предыстории (версия комнаты 3). */
+        private String playing() {
+            String code = service.create(ANNA, request(4)).code();
+            service.join(BORIS, code);
+            service.start(ANNA, code);
+            assertThat(service.executeGameCommand(ANNA, code, new BeginPlay(), true)).isEmpty();
+            return code;
+        }
+
+        private Player player(String code, PlayerIdentity identity) {
+            return gameRepository.find(code).orElseThrow().players().stream()
+                    .filter(p -> p.id().equals(identity.id())).findFirst().orElseThrow();
+        }
+
+        @Test
+        @DisplayName("в зале ожидания отключение и подключение — только свежие снимки")
+        void waitingRoom() {
+            String code = service.create(ANNA, request(4)).code();
+            service.join(BORIS, code);
+            notifications.clear();
+
+            assertThat(service.markDisconnected(code, BORIS.id())).isFalse();
+            service.markReconnected(code, BORIS.id());
+
+            assertThat(notifications).containsExactly("refresh@1", "refresh@1");
+        }
+
+        @Test
+        @DisplayName("в партии: отключился — DISCONNECTED с картами в руке, вернулся — ACTIVE с теми же картами")
+        void disconnectAndReturn() {
+            String code = playing();
+            List<Integer> hand = player(code, BORIS).hand();
+            notifications.clear();
+
+            assertThat(service.markDisconnected(code, BORIS.id())).isTrue();
+            assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.DISCONNECTED);
+            assertThat(player(code, BORIS).hand()).isEqualTo(hand);
+            assertThat(service.markDisconnected(code, BORIS.id())).isFalse();   // уже отключён — таймер не нужен
+
+            service.markReconnected(code, BORIS.id());
+            assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.ACTIVE);
+            assertThat(player(code, BORIS).hand()).isEqualTo(hand);
+            assertThat(notifications).containsExactly("PLAYER_DISCONNECTED@4", "refresh@4", "PLAYER_RECONNECTED@5");
+        }
+
+        @Test
+        @DisplayName("не вернулся вовремя — для партии вышел; устаревший таймер после возвращения ничего не делает")
+        void timeout() {
+            String code = playing();
+            service.markDisconnected(code, BORIS.id());
+            service.markReconnected(code, BORIS.id());
+            notifications.clear();
+
+            service.disconnectTimedOut(code, BORIS.id());
+            assertThat(notifications).isEmpty();
+            assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.ACTIVE);
+
+            service.markDisconnected(code, BORIS.id());
+            service.disconnectTimedOut(code, BORIS.id());
+            assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.LEFT);
+            assertThat(player(code, BORIS).hand()).isEmpty();   // карты ушли в резерв
+            assertThat(notifications).startsWith("PLAYER_DISCONNECTED@6", "PLAYER_GAVE_UP@7");
+            assertThat(room(code).isMember(BORIS.id())).isTrue();   // участником комнаты остаётся
+        }
+
+        @Test
+        @DisplayName("вышедшего кнопкой «Выйти» подключение не возвращает — для этого он снова входит в комнату")
+        void leftStaysLeft() {
+            String code = playing();
+            service.leave(BORIS, code);
+
+            assertThat(service.markDisconnected(code, BORIS.id())).isFalse();
+            service.markReconnected(code, BORIS.id());
+            assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.LEFT);
+
+            service.join(BORIS, code);
+            assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.ACTIVE);
+        }
+
+        @Test
+        @DisplayName("комнаты уже нет — ничего не происходит")
+        void noRoom() {
+            assertThat(service.markDisconnected("ZZZZZZ", BORIS.id())).isFalse();
+            service.markReconnected("ZZZZZZ", BORIS.id());
+            service.disconnectTimedOut("ZZZZZZ", BORIS.id());
+            assertThat(notifications).isEmpty();
+        }
+    }
 }

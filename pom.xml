@@ -85,6 +85,12 @@
 			<artifactId>spring-boot-starter-websocket-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Настоящий Redis в Docker для тестов хранилищ; версию задаёт Spring Boot -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<!-- Откуда брать game-core. Maven Central по-прежнему используется для всего остального.

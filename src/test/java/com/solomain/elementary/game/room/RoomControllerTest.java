@@ -1,6 +1,8 @@
 package com.solomain.elementary.game.room;
 
 import com.solomain.elementary.game.security.TestTokens;
+import com.solomain.elementary.game.game.GameRepository;
+import com.solomain.elementary.game.game.InMemoryGameRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,7 +25,7 @@ import java.net.http.HttpResponse;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * REST комнат целиком: сервис на случайном порту, настоящие токены, комнаты — в памяти
+ * REST комнат целиком: сервис на случайном порту, настоящие токены, комнаты и партии — в памяти
  * вместо Redis (вложенная {@code @TestConfiguration} подменяет хранилище через {@code @Primary}).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -43,6 +45,12 @@ class RoomControllerTest {
         @Primary
         RoomRepository inMemoryRoomRepository() {
             return new InMemoryRoomRepository();
+        }
+
+        @Bean
+        @Primary
+        GameRepository inMemoryGameRepository() {
+            return new InMemoryGameRepository();
         }
     }
 

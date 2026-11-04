@@ -69,13 +69,19 @@ public class GameService {
         return games.find(roomCode);
     }
 
+    /** Комната удалена — партия больше не нужна. */
+    public void delete(String roomCode) {
+        games.delete(roomCode);
+    }
+
     /**
      * Выполняет команду партии. Принятая команда сохраняет новое состояние; отклонённая
      * ничего не меняет — нарушение правил возвращается значением {@link CommandResult.Rejected}.
+     * Замок повторно входимый: можно вызывать и из кода, который уже держит замок комнаты.
      *
      * @throws ApiException {@code GAME_NOT_STARTED}, если в комнате нет партии
      */
-    public CommandResult execute(String roomCode, Command command) {
+    public GameOutcome execute(String roomCode, Command command) {
         return locks.withLock(roomCode, () -> {
             GameState state = games.find(roomCode).orElseThrow(() ->
                     new ApiException(ErrorCode.GAME_NOT_STARTED, "No game in room " + roomCode));
@@ -86,7 +92,7 @@ public class GameService {
             if (result instanceof CommandResult.Accepted(GameState newState)) {
                 games.save(roomCode, newState);
             }
-            return result;
+            return new GameOutcome(state, result);
         });
     }
 }

@@ -1,6 +1,11 @@
 package com.solomain.elementary.game.room;
 
+import com.solomain.elementary.core.engine.BeginPlay;
+import com.solomain.elementary.core.engine.PlayCard;
+import com.solomain.elementary.core.engine.StartVote;
+import com.solomain.elementary.core.error.RuleViolation;
 import com.solomain.elementary.core.model.Phase;
+import com.solomain.elementary.core.model.PlayerStatus;
 import com.solomain.elementary.core.model.Player;
 import com.solomain.elementary.game.cases.CaseCatalog;
 import com.solomain.elementary.game.cases.CasesProperties;
@@ -43,8 +48,12 @@ class RoomServiceTest {
     private final InMemoryGameRepository gameRepository = new InMemoryGameRepository();
     /** Что RoomService сообщил наружу: тип события (или «refresh») и версия комнаты. */
     private final List<String> notifications = new java.util.concurrent.CopyOnWriteArrayList<>();
-    private final RoomListener listener = (room, event) ->
-            notifications.add((event == null ? "refresh" : event.type()) + "@" + room.version());
+    private final RoomListener listener = (room, events) -> {
+        if (events.isEmpty()) {
+            notifications.add("refresh@" + room.version());
+        }
+        events.forEach(event -> notifications.add(event.type() + "@" + room.version()));
+    };
     private final RoomService service = serviceWith(new RoomCodeGenerator());
 
     private RoomService serviceWith(RoomCodeGenerator codes) {
@@ -349,6 +358,90 @@ class RoomServiceTest {
             assertThat(service.roomOfMember(ANNA, code).code()).isEqualTo(code);
             assertError(ErrorCode.NOT_IN_ROOM, () -> service.roomOfMember(BORIS, code));
             assertError(ErrorCode.ROOM_NOT_FOUND, () -> service.roomOfMember(ANNA, "ZZZZZZ"));
+        }
+    }
+
+    @Nested
+    @DisplayName("команды партии")
+    class GameCommands {
+
+        /** Партия Анны и Бориса, уже после предыстории. */
+        private String playing() {
+            String code = service.create(ANNA, request(4)).code();
+            service.join(BORIS, code);
+            service.start(ANNA, code);
+            assertThat(service.executeGameCommand(ANNA, code, new BeginPlay(), true)).isEmpty();
+            return code;
+        }
+
+        private PlayerIdentity current(String code) {
+            var state = gameRepository.find(code).orElseThrow();
+            String id = state.players().get(state.currentPlayerIndex()).id();
+            return id.equals(ANNA.id()) ? ANNA : BORIS;
+        }
+
+        @Test
+        @DisplayName("«Начать» — только хозяин; принятая команда сообщается и повышает версию")
+        void beginByHost() {
+            String code = service.create(ANNA, request(4)).code();
+            service.join(BORIS, code);
+            service.start(ANNA, code);
+            notifications.clear();
+
+            assertError(ErrorCode.NOT_HOST, () -> service.executeGameCommand(BORIS, code, new BeginPlay(), true));
+            assertThat(service.executeGameCommand(ANNA, code, new BeginPlay(), true)).isEmpty();
+
+            assertThat(gameRepository.find(code).orElseThrow().phase()).isEqualTo(Phase.PLAYING);
+            assertThat(notifications).containsExactly("refresh@3");   // событий нет, но снимки нужны
+        }
+
+        @Test
+        @DisplayName("ход: событие CARD_PLAYED; ход не в свою очередь — нарушение, без рассылки")
+        void play() {
+            String code = playing();
+            PlayerIdentity mover = current(code);
+            PlayerIdentity other = mover == ANNA ? BORIS : ANNA;
+            int card = gameRepository.find(code).orElseThrow().players().stream()
+                    .filter(p -> p.id().equals(mover.id())).findFirst().orElseThrow().hand().getFirst();
+            notifications.clear();
+
+            assertThat(service.executeGameCommand(other, code, new PlayCard(other.id(), card), false))
+                    .contains(RuleViolation.NOT_YOUR_TURN);
+            assertThat(notifications).isEmpty();
+
+            assertThat(service.executeGameCommand(mover, code, new PlayCard(mover.id(), card), false)).isEmpty();
+            assertThat(notifications).containsExactly("CARD_PLAYED@4");
+        }
+
+        @Test
+        @DisplayName("в зале ожидания игровые команды — GAME_NOT_STARTED")
+        void notStarted() {
+            String code = service.create(ANNA, request(4)).code();
+
+            assertError(ErrorCode.GAME_NOT_STARTED,
+                    () -> service.executeGameCommand(ANNA, code, new StartVote(ANNA.id()), false));
+        }
+
+        @Test
+        @DisplayName("«Выйти» в партии: игрок остаётся участником, в партии — LEFT; вход по ссылке возвращает")
+        void leaveAndReturn() {
+            String code = playing();
+
+            service.leave(BORIS, code);
+
+            assertThat(room(code).isMember("g-boris")).isTrue();
+            assertThat(status(code, "g-boris")).isEqualTo(PlayerStatus.LEFT);
+            assertThat(notifications).last().asString().startsWith("PLAYER_GAVE_UP@");
+
+            service.join(BORIS, code);
+
+            assertThat(status(code, "g-boris")).isEqualTo(PlayerStatus.ACTIVE);
+            assertThat(notifications).last().asString().startsWith("PLAYER_RECONNECTED@");
+        }
+
+        private PlayerStatus status(String code, String playerId) {
+            var state = gameRepository.find(code).orElseThrow();
+            return state.players().get(state.indexOfPlayer(playerId)).status();
         }
     }
 

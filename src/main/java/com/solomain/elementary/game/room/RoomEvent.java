@@ -49,6 +49,10 @@ public record RoomEvent(String type, String playerId, String name, Integer cardN
         return of("PLAYER_GAVE_UP", playerId);
     }
 
+    public static RoomEvent playerDisconnected(String playerId) {
+        return of("PLAYER_DISCONNECTED", playerId);
+    }
+
     public static RoomEvent playerReconnected(String playerId) {
         return of("PLAYER_RECONNECTED", playerId);
     }

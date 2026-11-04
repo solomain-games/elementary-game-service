@@ -3,6 +3,8 @@ package com.solomain.elementary.game.game;
 import com.solomain.elementary.core.engine.Command;
 import com.solomain.elementary.core.engine.DiscardCard;
 import com.solomain.elementary.core.engine.PlayCard;
+import com.solomain.elementary.core.engine.PlayerDisconnectTimeout;
+import com.solomain.elementary.core.engine.PlayerDisconnected;
 import com.solomain.elementary.core.engine.PlayerLeft;
 import com.solomain.elementary.core.engine.PlayerReturned;
 import com.solomain.elementary.core.engine.StartVote;
@@ -29,6 +31,8 @@ public final class GameEvents {
             case DiscardCard c -> events.add(RoomEvent.cardDiscarded(c.playerId()));
             case StartVote c -> events.add(RoomEvent.voteStarted(c.playerId()));
             case PlayerLeft c -> events.add(RoomEvent.playerGaveUp(c.playerId()));
+            case PlayerDisconnected c -> events.add(RoomEvent.playerDisconnected(c.playerId()));
+            case PlayerDisconnectTimeout c -> events.add(RoomEvent.playerGaveUp(c.playerId()));   // не вернулся — как вышел
             case PlayerReturned c -> events.add(RoomEvent.playerReconnected(c.playerId()));
             default -> {
                 // остальные команды видны по изменениям ниже

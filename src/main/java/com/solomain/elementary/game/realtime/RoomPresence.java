@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -50,6 +51,11 @@ public class RoomPresence {
         return connection.roomCodes().stream()
                 .filter(code -> !isOnline(code, connection.playerId()))
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /** Чья это сессия; пусто — сессия не подписывалась ни на одну комнату. */
+    public synchronized Optional<String> playerOf(String sessionId) {
+        return Optional.ofNullable(sessions.get(sessionId)).map(Connection::playerId);
     }
 
     public synchronized boolean isOnline(String roomCode, String playerId) {

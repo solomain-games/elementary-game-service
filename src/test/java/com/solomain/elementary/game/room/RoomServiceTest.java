@@ -1,7 +1,11 @@
 package com.solomain.elementary.game.room;
 
+import com.solomain.elementary.core.model.Phase;
+import com.solomain.elementary.core.model.Player;
 import com.solomain.elementary.game.cases.CaseCatalog;
 import com.solomain.elementary.game.cases.CasesProperties;
+import com.solomain.elementary.game.game.GameService;
+import com.solomain.elementary.game.game.InMemoryGameRepository;
 import com.solomain.elementary.game.security.PlayerIdentity;
 import com.solomain.elementary.game.web.ApiException;
 import com.solomain.elementary.game.web.ErrorCode;
@@ -18,6 +22,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
+import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,6 +38,9 @@ class RoomServiceTest {
     private static final PlayerIdentity VERA = new PlayerIdentity("g-vera", "Вера");
 
     private final InMemoryRoomRepository repository = new InMemoryRoomRepository();
+    // Поля инициализируются сверху вниз: хранилище партий должно быть объявлено раньше,
+    // чем поле service, которое его использует
+    private final InMemoryGameRepository gameRepository = new InMemoryGameRepository();
     /** Что RoomService сообщил наружу: тип события (или «refresh») и версия комнаты. */
     private final List<String> notifications = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final RoomListener listener = (room, event) ->
@@ -40,7 +48,9 @@ class RoomServiceTest {
     private final RoomService service = serviceWith(new RoomCodeGenerator());
 
     private RoomService serviceWith(RoomCodeGenerator codes) {
-        return new RoomService(repository, CASES, codes, new RoomLocks(), listener, CLOCK);
+        var locks = new RoomLocks();
+        var games = new GameService(gameRepository, CASES, locks, new Random(42), CLOCK);
+        return new RoomService(repository, CASES, codes, locks, listener, games, CLOCK);
     }
 
     private static CreateRoomRequest request(int maxPlayers) {
@@ -70,6 +80,27 @@ class RoomServiceTest {
         assertThat(room.hostId()).isEqualTo("g-anna");
         assertThat(room.status()).isEqualTo(RoomStatus.IN_GAME);
         assertThat(room.version()).isEqualTo(4);   // четыре изменения после создания
+
+        // Запуск раздал карты: партия в предыстории, игроки — оставшиеся участники
+        var game = gameRepository.find(code).orElseThrow();
+        assertThat(game.phase()).isEqualTo(Phase.PROLOGUE);
+        assertThat(game.players()).extracting(Player::id).containsExactlyInAnyOrder("g-anna", "g-vera");
+        // В деле-заглушке 5 карт: №1 на столе, остальные 4 раздаются по кругу, пока колода
+        // не кончится, — по 2 каждому (а не по 3, как в полном деле на 30–40 карт)
+        assertThat(game.table()).containsExactly(1);
+        assertThat(game.players()).allSatisfy(player -> assertThat(player.hand()).hasSize(2));
+        assertThat(game.deck()).isEmpty();
+        assertThat(game.settings().hostId()).isEqualTo("g-anna");
+    }
+
+    @Test
+    @DisplayName("таймер хода из настроек комнаты попадает в партию")
+    void turnTimeoutPassedToGame() {
+        String code = service.create(ANNA, new CreateRoomRequest("demo", "ru", 4, 60)).code();
+        service.start(ANNA, code);
+
+        assertThat(gameRepository.find(code).orElseThrow().settings().turnTimeout())
+                .isEqualTo(java.time.Duration.ofSeconds(60));
     }
 
     @Nested

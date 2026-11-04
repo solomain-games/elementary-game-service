@@ -7,6 +7,8 @@ import com.solomain.elementary.game.room.RoomService;
 import com.solomain.elementary.game.security.PlayerIdentity;
 import com.solomain.elementary.game.security.TestTokens;
 import org.junit.jupiter.api.AfterEach;
+import com.solomain.elementary.game.game.GameRepository;
+import com.solomain.elementary.game.game.InMemoryGameRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,6 +63,12 @@ class StompRoomTest {
         @Primary
         RoomRepository inMemoryRoomRepository() {
             return new InMemoryRoomRepository();
+        }
+
+        @Bean
+        @Primary
+        GameRepository inMemoryGameRepository() {
+            return new InMemoryGameRepository();
         }
     }
 
@@ -167,13 +175,20 @@ class StompRoomTest {
         anna.session.send("/app/room/" + code + "/play", Map.of("requestId", "r2", "cardNumber", 3));
         boris.session.send("/app/room/" + code + "/sync", Map.of("requestId", "r3"));
 
+        // Кадры одной сессии сервер обрабатывает параллельно, поэтому ответы могут прийти
+        // в любом порядке — по requestId клиент и понимает, на какую команду ответ
+        Map<String, JsonNode> byRequest = new java.util.HashMap<>();
+        for (int i = 0; i < 2; i++) {
+            JsonNode error = anna.awaitError();
+            byRequest.put(error.get("requestId").asString(), error);
+        }
         // JsonNode сам по себе Iterable, поэтому assertThat(node) выбрал бы проверки коллекций:
         // проверяем поля по одному
-        JsonNode unknown = anna.awaitError();
-        assertThat(unknown.get("requestId").asString()).isEqualTo("r1");
-        assertThat(unknown.get("command").asString()).isEqualTo("dance");
-        assertThat(unknown.get("code").asString()).isEqualTo("UNKNOWN_COMMAND");
-        assertThat(anna.awaitError().get("code").asString()).isEqualTo("GAME_NOT_STARTED");
+        assertThat(byRequest).containsOnlyKeys("r1", "r2");
+        assertThat(byRequest.get("r1").get("command").asString()).isEqualTo("dance");
+        assertThat(byRequest.get("r1").get("code").asString()).isEqualTo("UNKNOWN_COMMAND");
+        assertThat(byRequest.get("r2").get("command").asString()).isEqualTo("play");
+        assertThat(byRequest.get("r2").get("code").asString()).isEqualTo("GAME_NOT_STARTED");
         assertThat(boris.awaitError().get("code").asString()).isEqualTo("NOT_IN_ROOM");
     }
 

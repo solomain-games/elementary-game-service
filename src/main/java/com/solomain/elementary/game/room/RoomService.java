@@ -1,7 +1,9 @@
 package com.solomain.elementary.game.room;
 
+import com.solomain.elementary.core.engine.PlayerInfo;
 import com.solomain.elementary.game.cases.CaseCatalog;
 import com.solomain.elementary.game.cases.LoadedCase;
+import com.solomain.elementary.game.game.GameService;
 import com.solomain.elementary.game.security.PlayerIdentity;
 import com.solomain.elementary.game.web.ApiException;
 import com.solomain.elementary.game.web.ErrorCode;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Locale;
 import java.util.function.UnaryOperator;
 
@@ -30,15 +33,17 @@ public class RoomService {
     private final RoomCodeGenerator codes;
     private final RoomLocks locks;
     private final RoomListener listener;
+    private final GameService games;
     private final Clock clock;
 
     public RoomService(RoomRepository rooms, CaseCatalog cases, RoomCodeGenerator codes, RoomLocks locks,
-                       RoomListener listener, Clock clock) {
+                       RoomListener listener, GameService games, Clock clock) {
         this.rooms = rooms;
         this.cases = cases;
         this.codes = codes;
         this.locks = locks;
         this.listener = listener;
+        this.games = games;
         this.clock = clock;
     }
 
@@ -121,13 +126,19 @@ public class RoomService {
     }
 
     /**
-     * Хозяин запускает игру при любом числе игроков (ТЗ 4.1). Пока только меняет статус комнаты:
-     * раздачу и саму партию добавят Г6 и Г7.
+     * Хозяин запускает игру при любом числе игроков (ТЗ 4.1): раздача карт (партия в фазе
+     * {@code PROLOGUE}) и комната — в {@code IN_GAME}. Всё под одним замком комнаты.
      */
     public void start(PlayerIdentity host, String code) {
         update(code, RoomEvent.gameStarted(), room -> {
             requireHost(room, host);
             requireWaiting(room, "game is already started");
+            LoadedCase loadedCase = cases.find(room.caseId()).orElseThrow(() ->
+                    new ApiException(ErrorCode.CASE_NOT_FOUND, "Case " + room.caseId() + " is no longer available"));
+            List<PlayerInfo> players = room.members().stream()
+                    .map(member -> new PlayerInfo(member.id(), member.name()))
+                    .toList();
+            games.create(room.code(), loadedCase.definition(), players, room.hostId(), room.turnTimeoutSeconds());
             return room.withStatus(RoomStatus.IN_GAME);
         });
     }

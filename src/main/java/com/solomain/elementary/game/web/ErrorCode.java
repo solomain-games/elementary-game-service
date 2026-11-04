@@ -13,6 +13,7 @@ public enum ErrorCode {
     ROOM_NOT_FOUND(HttpStatus.NOT_FOUND),
     ROOM_FULL(HttpStatus.CONFLICT),
     GAME_ALREADY_STARTED(HttpStatus.CONFLICT),
+    GAME_NOT_STARTED(HttpStatus.CONFLICT),
     LANGUAGE_NOT_SUPPORTED(HttpStatus.CONFLICT);
 
     private final HttpStatus status;

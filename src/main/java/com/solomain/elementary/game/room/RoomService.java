@@ -7,6 +7,8 @@ import com.solomain.elementary.core.engine.PlayerDisconnected;
 import com.solomain.elementary.core.engine.PlayerInfo;
 import com.solomain.elementary.core.engine.PlayerLeft;
 import com.solomain.elementary.core.engine.PlayerReturned;
+import com.solomain.elementary.core.engine.TurnTimeout;
+import com.solomain.elementary.core.engine.VoteTimeout;
 import com.solomain.elementary.core.error.RuleViolation;
 import com.solomain.elementary.core.model.GameState;
 import com.solomain.elementary.core.model.Phase;
@@ -17,6 +19,10 @@ import com.solomain.elementary.game.game.GameEvents;
 import com.solomain.elementary.game.game.GameOutcome;
 import com.solomain.elementary.game.game.GameService;
 import com.solomain.elementary.game.security.PlayerIdentity;
+import com.solomain.elementary.game.timer.GameTimer;
+import com.solomain.elementary.game.timer.GameTimers;
+import com.solomain.elementary.game.timer.TimerQueue;
+import com.solomain.elementary.game.timer.TimersProperties;
 import com.solomain.elementary.game.web.ApiException;
 import com.solomain.elementary.game.web.ErrorCode;
 import org.slf4j.Logger;
@@ -47,16 +53,21 @@ public class RoomService {
     private final RoomLocks locks;
     private final RoomListener listener;
     private final GameService games;
+    private final TimerQueue timers;
+    private final TimersProperties timersProperties;
     private final Clock clock;
 
     public RoomService(RoomRepository rooms, CaseCatalog cases, RoomCodeGenerator codes, RoomLocks locks,
-                       RoomListener listener, GameService games, Clock clock) {
+                       RoomListener listener, GameService games, TimerQueue timers,
+                       TimersProperties timersProperties, Clock clock) {
         this.rooms = rooms;
         this.cases = cases;
         this.codes = codes;
         this.locks = locks;
         this.listener = listener;
         this.games = games;
+        this.timers = timers;
+        this.timersProperties = timersProperties;
         this.clock = clock;
     }
 
@@ -161,6 +172,10 @@ public class RoomService {
                     .map(member -> new PlayerInfo(member.id(), member.name()))
                     .toList();
             games.create(room.code(), loadedCase.definition(), players, room.hostId(), room.turnTimeoutSeconds());
+            // Кто был не в сети в момент старта, так и останется «в игре», пока не подключится и не уйдёт.
+            // Через reconnect-grace проверка отметит таких отключёнными (Г9)
+            timers.schedule(new GameTimer.PresenceCheck(room.code()),
+                    clock.instant().plus(timersProperties.reconnectGrace()));
             return room.withStatus(RoomStatus.IN_GAME);
         });
     }
@@ -200,6 +215,7 @@ public class RoomService {
             return Optional.of(violation);
         }
         GameState after = ((CommandResult.Accepted) outcome.result()).state();
+        GameTimers.reschedule(timers, room.code(), outcome.before(), after);   // срок хода, голосования
         Room changed = after.phase() == Phase.FINISHED ? room.withStatus(RoomStatus.FINISHED) : room;
         Room saved = changed.nextVersion();
         rooms.save(saved);
@@ -265,16 +281,37 @@ public class RoomService {
         });
     }
 
-    /**
-     * Отключённый игрок не вернулся вовремя: для партии это выход, карты уходят в резерв.
-     * Если он уже вернулся или партии больше нет, ядро/проверка команду отбросят — это устаревший таймер.
-     */
-    public void disconnectTimedOut(String rawCode, String playerId) {
+    /** Игроки идущей партии со статусом {@code ACTIVE}; пусто — партии нет. */
+    public List<String> activePlayers(String rawCode) {
         String code = normalize(rawCode);
+        return locks.withLock(code, () -> rooms.find(code)
+                .filter(room -> room.status() == RoomStatus.IN_GAME)
+                .flatMap(room -> games.find(code))
+                .map(state -> state.players().stream()
+                        .filter(player -> player.status() == PlayerStatus.ACTIVE)
+                        .map(player -> player.id())
+                        .toList())
+                .orElse(List.of()));
+    }
+
+    /**
+     * Сработал таймер партии (Г9): истёк ход, голосование или ожидание отключившегося.
+     * Устаревший таймер (игрок успел сходить или вернуться, партии больше нет) ядро отклонит —
+     * это не ошибка, просто ничего не происходит.
+     */
+    public void timerExpired(GameTimer timer) {
+        Command command = switch (timer) {
+            case GameTimer.TurnEnd t -> new TurnTimeout(t.playerId(), t.turnNumber());
+            case GameTimer.VoteEnd t -> new VoteTimeout(t.deadline());
+            case GameTimer.DisconnectWait t -> new PlayerDisconnectTimeout(t.playerId());
+            case GameTimer.PresenceCheck t -> throw new IllegalArgumentException("Not a game timer: " + t.key());
+        };
+        String code = normalize(timer.roomCode());
         locks.withLock(code, () -> {
             rooms.find(code)
-                    .filter(room -> gameStatus(room, playerId).orElse(null) == PlayerStatus.DISCONNECTED)
-                    .ifPresent(room -> applyGameCommand(room, new PlayerDisconnectTimeout(playerId)));
+                    .filter(room -> room.status() == RoomStatus.IN_GAME)
+                    .flatMap(room -> applyGameCommand(room, command))
+                    .ifPresent(violation -> log.debug("Stale timer {}: {}", timer.key(), violation));
             return null;
         });
     }

@@ -8,6 +8,8 @@ import com.solomain.elementary.game.room.RoomRepository;
 import com.solomain.elementary.game.room.RoomService;
 import com.solomain.elementary.game.security.PlayerIdentity;
 import com.solomain.elementary.game.security.TestTokens;
+import com.solomain.elementary.game.timer.GameTimer;
+import com.solomain.elementary.game.timer.InMemoryTimerQueue;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,15 +27,18 @@ import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Г10: закрыл вкладку — остальные видят «отключён»; открыл снова — вернулся со своими картами.
- * Срок ожидания укорочен до 2 секунд, чтобы проверить и «не вернулся».
+ * Срок ожидания укорочен до 2 секунд, чтобы проверить и «не вернулся»; планировщик таймеров
+ * включён (в профиле test он выключен) и работает с очередью в памяти.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "elementary.presence.disconnect-timeout=2s")
+        properties = {"elementary.timers.enabled=true", "elementary.timers.disconnect-timeout=2s"})
 @ActiveProfiles("test")
 class StompConnectionTest {
 
@@ -54,6 +59,12 @@ class StompConnectionTest {
         GameRepository inMemoryGameRepository() {
             return new InMemoryGameRepository();
         }
+
+        @Bean
+        @Primary
+        InMemoryTimerQueue inMemoryTimerQueue() {   // точный тип — чтобы тест мог получить её через @Autowired
+            return new InMemoryTimerQueue();
+        }
     }
 
     @DynamicPropertySource
@@ -68,7 +79,7 @@ class StompConnectionTest {
     private RoomService rooms;
 
     @Autowired
-    private DisconnectTimers timers;
+    private InMemoryTimerQueue timers;
 
     private final List<WebSocketStompClient> clients = new ArrayList<>();
 
@@ -90,13 +101,14 @@ class StompConnectionTest {
         anna.awaitEvent("PLAYER_DISCONNECTED");
         JsonNode seen = anna.awaitGame(g -> status(g, BORIS).equals("DISCONNECTED"));
         assertThat(player(seen, BORIS).get("handSize").asInt()).isEqualTo(2);   // карты остались у него
-        assertThat(timers.isPending(code, BORIS.id())).isTrue();
+        // Таймер ставится сразу после рассылки снимка, поэтому снимок может прийти раньше — ждём
+        awaitTrue(() -> timers.contains(new GameTimer.DisconnectWait(code, BORIS.id())), "disconnect timer");
 
         TestPlayer borisAgain = enter(BORIS, code);
         anna.awaitEvent("PLAYER_RECONNECTED");
         JsonNode back = borisAgain.awaitGame(g -> status(g, BORIS).equals("ACTIVE"));
         assertThat(back.get("hand").toString()).isEqualTo(hand);
-        assertThat(timers.isPending(code, BORIS.id())).isFalse();
+        assertThat(timers.contains(new GameTimer.DisconnectWait(code, BORIS.id()))).isFalse();
     }
 
     @Test
@@ -128,13 +140,23 @@ class StompConnectionTest {
         // обработать отключение и смотрим, что события не было
         Thread.sleep(500);
         assertThat(anna.events).noneMatch(e -> e.get("type").asString().equals("PLAYER_DISCONNECTED"));
-        assertThat(timers.isPending(code, BORIS.id())).isFalse();
+        assertThat(timers.contains(new GameTimer.DisconnectWait(code, BORIS.id()))).isFalse();
 
         tab2.session.disconnect();
         anna.awaitEvent("PLAYER_DISCONNECTED");
     }
 
     // ---------- общее ----------
+
+    private static void awaitTrue(BooleanSupplier condition, String what) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TestPlayer.TIMEOUT_SECONDS);
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("No " + what + " within " + TestPlayer.TIMEOUT_SECONDS + " s");
+            }
+            Thread.sleep(20);
+        }
+    }
 
     private String newRoom() {
         String code = rooms.create(ANNA, new CreateRoomRequest("demo", "ru", 4, null)).code();

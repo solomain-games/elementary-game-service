@@ -6,6 +6,8 @@ import com.solomain.elementary.game.room.RoomRepository;
 import com.solomain.elementary.game.room.RoomService;
 import com.solomain.elementary.game.security.PlayerIdentity;
 import com.solomain.elementary.game.security.TestTokens;
+import com.solomain.elementary.game.timer.InMemoryTimerQueue;
+import com.solomain.elementary.game.timer.TimerQueue;
 import org.junit.jupiter.api.AfterEach;
 import com.solomain.elementary.game.game.GameRepository;
 import com.solomain.elementary.game.game.InMemoryGameRepository;
@@ -69,6 +71,12 @@ class StompRoomTest {
         @Primary
         GameRepository inMemoryGameRepository() {
             return new InMemoryGameRepository();
+        }
+
+        @Bean
+        @Primary
+        TimerQueue inMemoryTimerQueue() {
+            return new InMemoryTimerQueue();
         }
     }
 

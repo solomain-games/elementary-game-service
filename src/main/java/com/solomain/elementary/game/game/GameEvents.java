@@ -8,12 +8,14 @@ import com.solomain.elementary.core.engine.PlayerDisconnected;
 import com.solomain.elementary.core.engine.PlayerLeft;
 import com.solomain.elementary.core.engine.PlayerReturned;
 import com.solomain.elementary.core.engine.StartVote;
+import com.solomain.elementary.core.engine.TurnTimeout;
 import com.solomain.elementary.core.model.GameState;
 import com.solomain.elementary.core.model.Phase;
 import com.solomain.elementary.game.room.RoomEvent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * События для анимаций и уведомлений (протокол, 5.4) по принятой команде: что сделал игрок
@@ -31,6 +33,8 @@ public final class GameEvents {
             case DiscardCard c -> events.add(RoomEvent.cardDiscarded(c.playerId()));
             case StartVote c -> events.add(RoomEvent.voteStarted(c.playerId()));
             case PlayerLeft c -> events.add(RoomEvent.playerGaveUp(c.playerId()));
+            case TurnTimeout c -> newTableCard(before, after)
+                    .ifPresent(card -> events.add(RoomEvent.cardPlayed(c.playerId(), card, true)));
             case PlayerDisconnected c -> events.add(RoomEvent.playerDisconnected(c.playerId()));
             case PlayerDisconnectTimeout c -> events.add(RoomEvent.playerGaveUp(c.playerId()));   // не вернулся — как вышел
             case PlayerReturned c -> events.add(RoomEvent.playerReconnected(c.playerId()));
@@ -48,5 +52,10 @@ public final class GameEvents {
             events.add(RoomEvent.simple("RESULTS_SHOWN"));
         }
         return events;
+    }
+
+    /** Карта, которую таймер выложил за игрока: новые карты стола добавляются в конец. */
+    private static Optional<Integer> newTableCard(GameState before, GameState after) {
+        return after.table().size() > before.table().size() ? Optional.of(after.table().getLast()) : Optional.empty();
     }
 }

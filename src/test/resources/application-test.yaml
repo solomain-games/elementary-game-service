@@ -6,3 +6,5 @@ elementary:
   jwt:
     # Заглушка: тесты, которым нужна проверка токенов, подставляют адрес своей заглушки JWKS
     jwk-set-uri: http://localhost:1/.well-known/jwks.json
+  timers:
+    enabled: false   # планировщик ходил бы в Redis каждую секунду; тесты таймеров включают его сами

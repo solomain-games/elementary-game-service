@@ -3,6 +3,8 @@ package com.solomain.elementary.game.room;
 import com.solomain.elementary.game.security.TestTokens;
 import com.solomain.elementary.game.game.GameRepository;
 import com.solomain.elementary.game.game.InMemoryGameRepository;
+import com.solomain.elementary.game.timer.InMemoryTimerQueue;
+import com.solomain.elementary.game.timer.TimerQueue;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +53,12 @@ class RoomControllerTest {
         @Primary
         GameRepository inMemoryGameRepository() {
             return new InMemoryGameRepository();
+        }
+
+        @Bean
+        @Primary
+        TimerQueue inMemoryTimerQueue() {
+            return new InMemoryTimerQueue();
         }
     }
 

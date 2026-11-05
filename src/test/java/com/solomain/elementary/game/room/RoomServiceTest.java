@@ -12,6 +12,9 @@ import com.solomain.elementary.game.cases.CasesProperties;
 import com.solomain.elementary.game.game.GameService;
 import com.solomain.elementary.game.game.InMemoryGameRepository;
 import com.solomain.elementary.game.security.PlayerIdentity;
+import com.solomain.elementary.game.timer.GameTimer;
+import com.solomain.elementary.game.timer.InMemoryTimerQueue;
+import com.solomain.elementary.game.timer.TimersProperties;
 import com.solomain.elementary.game.web.ApiException;
 import com.solomain.elementary.game.web.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.function.Executable;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
@@ -38,6 +42,8 @@ class RoomServiceTest {
     private static final CaseCatalog CASES = new CaseCatalog(new CasesProperties(testCasesDir()));
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-15T12:00:00Z"), ZoneOffset.UTC);
 
+    static final TimersProperties TIMERS = new TimersProperties(false, Duration.ofMinutes(2), Duration.ofSeconds(30));
+
     private static final PlayerIdentity ANNA = new PlayerIdentity("g-anna", "Анна");
     private static final PlayerIdentity BORIS = new PlayerIdentity("g-boris", "Борис");
     private static final PlayerIdentity VERA = new PlayerIdentity("g-vera", "Вера");
@@ -46,6 +52,7 @@ class RoomServiceTest {
     // Поля инициализируются сверху вниз: хранилище партий должно быть объявлено раньше,
     // чем поле service, которое его использует
     private final InMemoryGameRepository gameRepository = new InMemoryGameRepository();
+    private final InMemoryTimerQueue timerQueue = new InMemoryTimerQueue();
     /** Что RoomService сообщил наружу: тип события (или «refresh») и версия комнаты. */
     private final List<String> notifications = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final RoomListener listener = (room, events) -> {
@@ -59,7 +66,7 @@ class RoomServiceTest {
     private RoomService serviceWith(RoomCodeGenerator codes) {
         var locks = new RoomLocks();
         var games = new GameService(gameRepository, CASES, locks, new Random(42), CLOCK);
-        return new RoomService(repository, CASES, codes, locks, listener, games, CLOCK);
+        return new RoomService(repository, CASES, codes, locks, listener, games, timerQueue, TIMERS, CLOCK);
     }
 
     private static CreateRoomRequest request(int maxPlayers) {
@@ -540,12 +547,12 @@ class RoomServiceTest {
             service.markReconnected(code, BORIS.id());
             notifications.clear();
 
-            service.disconnectTimedOut(code, BORIS.id());
+            service.timerExpired(new GameTimer.DisconnectWait(code, BORIS.id()));
             assertThat(notifications).isEmpty();
             assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.ACTIVE);
 
             service.markDisconnected(code, BORIS.id());
-            service.disconnectTimedOut(code, BORIS.id());
+            service.timerExpired(new GameTimer.DisconnectWait(code, BORIS.id()));
             assertThat(player(code, BORIS).status()).isEqualTo(PlayerStatus.LEFT);
             assertThat(player(code, BORIS).hand()).isEmpty();   // карты ушли в резерв
             assertThat(notifications).startsWith("PLAYER_DISCONNECTED@6", "PLAYER_GAVE_UP@7");
@@ -567,11 +574,23 @@ class RoomServiceTest {
         }
 
         @Test
+        @DisplayName("старт партии ставит проверку присутствия — для тех, кого не было в сети")
+        void presenceCheckOnStart() {
+            String code = playing();
+            assertThat(timerQueue.scheduled())
+                    .containsEntry(new GameTimer.PresenceCheck(code), CLOCK.instant().plus(TIMERS.reconnectGrace()));
+            assertThat(service.activePlayers(code)).containsExactlyInAnyOrder(ANNA.id(), BORIS.id());
+
+            service.markDisconnected(code, BORIS.id());
+            assertThat(service.activePlayers(code)).containsExactly(ANNA.id());
+        }
+
+        @Test
         @DisplayName("комнаты уже нет — ничего не происходит")
         void noRoom() {
             assertThat(service.markDisconnected("ZZZZZZ", BORIS.id())).isFalse();
             service.markReconnected("ZZZZZZ", BORIS.id());
-            service.disconnectTimedOut("ZZZZZZ", BORIS.id());
+            service.timerExpired(new GameTimer.DisconnectWait("ZZZZZZ", BORIS.id()));
             assertThat(notifications).isEmpty();
         }
     }

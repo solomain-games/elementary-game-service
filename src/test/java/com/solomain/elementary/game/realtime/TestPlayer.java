@@ -3,6 +3,7 @@ package com.solomain.elementary.game.realtime;
 import com.solomain.elementary.game.security.PlayerIdentity;
 import com.solomain.elementary.game.security.TestTokens;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
@@ -110,6 +111,21 @@ final class TestPlayer {
                     @Override
                     public void handleFrame(StompHeaders frameHeaders, Object payload) {
                         testPlayer.stompError.complete(frameHeaders.getFirst("message"));   // только ERROR
+                    }
+
+                    // Если ERROR не дошёл, а соединение оборвалось или кадр не разобрался, тест упадёт
+                    // с настоящей причиной, а не с безликим таймаутом
+                    @Override
+                    public void handleException(StompSession session, StompCommand command, StompHeaders frameHeaders,
+                                                byte[] payload, Throwable exception) {
+                        testPlayer.stompError.completeExceptionally(
+                                new AssertionError("STOMP " + command + " " + frameHeaders + " failed", exception));
+                    }
+
+                    @Override
+                    public void handleTransportError(StompSession session, Throwable exception) {
+                        testPlayer.stompError.completeExceptionally(
+                                new AssertionError("Transport error before ERROR frame", exception));
                     }
                 }).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return testPlayer;
